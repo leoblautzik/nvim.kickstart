@@ -3,9 +3,34 @@
 vim.api.nvim_create_autocmd('BufNewFile', {
   pattern = '*.py',
   callback = function()
-    vim.api.nvim_buf_set_lines(0, 0, 0, false,
-      { 'def main():', '    pass', '', 'if __name__ == "__main__":', '    main()' })
-    vim.api.nvim_win_set_cursor(0, { 2, 4 }) -- Mueve el cursor a la línea con la indentación
+    local filename = vim.fn.expand '%:t' -- Obtiene el nombre del archivo
+    if not filename:match '^test_' then
+      vim.api.nvim_buf_set_lines(0, 0, 0, false, {
+        'def main():',
+        '    pass',
+        '',
+        'if __name__ == "__main__":',
+        '    main()',
+      })
+      vim.api.nvim_win_set_cursor(0, { 2, 4 }) -- Mueve el cursor a la línea con la indentación
+    end
+  end,
+})
+-- para los archivos de test_.py
+vim.api.nvim_create_autocmd('BufNewFile', {
+  pattern = 'test_*.py',
+  callback = function()
+    vim.api.nvim_buf_set_lines(0, 0, 0, false, {
+      'import unittest',
+      '',
+      'class TestSomething(unittest.TestCase):',
+      '    def test_example(self):',
+      '        self.assertEqual(1 + 1, 2)',
+      '',
+      "if __name__ == '__main__':",
+      '    unittest.main()',
+    })
+    vim.api.nvim_win_set_cursor(0, { 4, 8 }) -- Mueve el cursor dentro del primer test
   end,
 })
 
