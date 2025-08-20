@@ -78,24 +78,74 @@ vim.api.nvim_create_autocmd('BufNewFile', {
 
 ------------------------------------------------------------------
 -- compilar y ejecutar
+-- Guarda el archivo si está modificado
+-- Reutiliza una terminal si ya existe
+-- Envia el nuevo comando a esa terminal
+-- Funciona para C, Python, Go, Lua
+-- Muestra errores de compilación en quickfix si es C
+-- Ejecutar código según tipo de archivo, abre panel único de salida
+
 vim.keymap.set('n', '<leader>ex', function()
+  if vim.bo.modified then
+    vim.cmd 'write'
+  end
+
   local file_name = vim.api.nvim_buf_get_name(0)
   local file_type = vim.bo.filetype
 
-  -- Función para abrir una terminal flotante limpia
-  local function open_terminal(cmd)
-    vim.cmd('botright 10split | terminal ' .. cmd)
+  local function run_cmd_output(cmd, cwd)
+    -- Cerrar panel anterior si existe
+    if vim.g.runner_win and vim.api.nvim_win_is_valid(vim.g.runner_win) then
+      vim.api.nvim_win_close(vim.g.runner_win, true)
+    end
+
+    -- Crear nuevo buffer temporal para la terminal
+    local buf = vim.api.nvim_create_buf(false, true)
+    local win_height = 12
+    vim.cmd('botright ' .. win_height .. 'split')
+    local win = vim.api.nvim_get_current_win()
+    vim.api.nvim_win_set_buf(win, buf)
+    vim.g.runner_win = win
+
+    -- Ejecutar comando
+    vim.fn.termopen(cmd, {
+      cwd = cwd, -- directorio de trabajo opcional
+      on_exit = function()
+        vim.api.nvim_buf_set_option(buf, 'modifiable', false)
+      end,
+    })
   end
 
   if file_type == 'lua' then
-    open_terminal('lua ' .. file_name)
+    run_cmd_output({ 'lua', file_name }, vim.fn.expand '%:p:h')
   elseif file_type == 'c' then
-    local compile_cmd = 'gcc ' .. file_name .. ' -o /tmp/a.out && /tmp/a.out'
-    open_terminal(compile_cmd)
+    local out = '/tmp/a.out'
+    local compile_cmd = { 'gcc', file_name, '-o', out }
+    local compile_result = vim.fn.system(compile_cmd)
+    if vim.v.shell_error ~= 0 then
+      print('Error de compilación:\n' .. compile_result)
+    else
+      run_cmd_output({ out }, vim.fn.expand '%:p:h')
+    end
   elseif file_type == 'python' then
-    open_terminal('python3 ' .. file_name)
+    run_cmd_output({ 'python3', file_name }, vim.fn.expand '%:p:h')
+  elseif file_type == 'go' then
+    -- Buscar go.mod, si existe usar su carpeta, si no la del archivo
+    local gomod = vim.fn.findfile('go.mod', vim.fn.expand '%:p:h' .. ';')
+    local dir = gomod ~= '' and vim.fn.fnamemodify(gomod, ':h') or vim.fn.expand '%:p:h'
+    run_cmd_output({ 'go', 'run', file_name }, dir)
   else
     print 'Formato no soportado'
+  end
+end, { desc = 'Ejecutar archivo según su tipo (Go, C, Python, Lua, etc.)' })
+
+-- Cerrar panel de ejecución con <leader>ec
+vim.keymap.set('n', '<leader>ec', function()
+  if vim.g.runner_win and vim.api.nvim_win_is_valid(vim.g.runner_win) then
+    vim.api.nvim_win_close(vim.g.runner_win, true)
+    vim.g.runner_win = nil
+  else
+    print 'No hay panel de ejecución activo'
   end
 end)
 
